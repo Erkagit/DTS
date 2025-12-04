@@ -1,0 +1,281 @@
+// Evently Database Schema
+// Using Prisma ORM with PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USER & AUTH
+// ============================================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  phone         String?   @unique
+  name          String
+  avatar        String?
+  role          UserRole  @default(USER)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  bookings      Booking[]
+  reviews       Review[]
+  favorites     Favorite[]
+  vendor        Vendor?
+  
+  @@map("users")
+}
+
+enum UserRole {
+  USER
+  VENDOR
+  ADMIN
+}
+
+// ============================================================================
+// VENDOR
+// ============================================================================
+
+model Vendor {
+  id            String        @id @default(cuid())
+  userId        String        @unique
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  businessName  String
+  slug          String        @unique
+  description   String?
+  category      VendorCategory
+  
+  // Location
+  address       String?
+  city          String?
+  latitude      Float?
+  longitude     Float?
+  
+  // Contact
+  contactEmail  String?
+  contactPhone  String?
+  website       String?
+  
+  // Media
+  logo          String?
+  coverImage    String?
+  images        String[]
+  
+  // Status
+  isVerified    Boolean       @default(false)
+  isActive      Boolean       @default(true)
+  rating        Float         @default(0)
+  reviewCount   Int           @default(0)
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  // Relations
+  services      Service[]
+  reviews       Review[]
+  favorites     Favorite[]
+  bookingItems  BookingItem[]
+  
+  @@map("vendors")
+}
+
+enum VendorCategory {
+  VENUE
+  CATERING
+  ARTIST
+  SERVICE
+}
+
+// ============================================================================
+// SERVICE (What vendors offer)
+// ============================================================================
+
+model Service {
+  id            String        @id @default(cuid())
+  vendorId      String
+  vendor        Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  
+  name          String
+  description   String?
+  category      ServiceCategory
+  
+  // Pricing
+  priceType     PriceType     @default(FIXED)
+  price         Float
+  priceUnit     String?       // "per person", "per hour", etc.
+  minQuantity   Int?
+  maxQuantity   Int?
+  
+  // Capacity (for venues)
+  capacity      Int?
+  
+  // Media
+  images        String[]
+  
+  // Availability
+  isActive      Boolean       @default(true)
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  // Relations
+  bookingItems  BookingItem[]
+  
+  @@map("services")
+}
+
+enum ServiceCategory {
+  // Venues
+  WEDDING_HALL
+  CONFERENCE_ROOM
+  VIP_ROOM
+  OUTDOOR_VENUE
+  RESTAURANT
+  
+  // Catering
+  FOOD_CATERING
+  DRINK_BAR
+  DESSERT_TABLE
+  COFFEE_STATION
+  
+  // Artists
+  DJ
+  BAND
+  MC
+  DANCER
+  PHOTOGRAPHER
+  VIDEOGRAPHER
+  
+  // Services
+  DECORATION
+  SOUND_LIGHTING
+  EQUIPMENT_RENTAL
+  EVENT_PLANNER
+}
+
+enum PriceType {
+  FIXED
+  PER_PERSON
+  PER_HOUR
+  CUSTOM
+}
+
+// ============================================================================
+// BOOKING
+// ============================================================================
+
+model Booking {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Event Details
+  eventName     String
+  eventType     String?
+  eventDate     DateTime
+  startTime     DateTime?
+  endTime       DateTime?
+  guestCount    Int?
+  notes         String?
+  
+  // Pricing
+  subtotal      Float         @default(0)
+  serviceFee    Float         @default(0)
+  total         Float         @default(0)
+  
+  // Status
+  status        BookingStatus @default(PENDING)
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  // Relations
+  items         BookingItem[]
+  
+  @@map("bookings")
+}
+
+enum BookingStatus {
+  DRAFT
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model BookingItem {
+  id            String        @id @default(cuid())
+  bookingId     String
+  booking       Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  
+  vendorId      String
+  vendor        Vendor        @relation(fields: [vendorId], references: [id])
+  
+  serviceId     String
+  service       Service       @relation(fields: [serviceId], references: [id])
+  
+  quantity      Int           @default(1)
+  unitPrice     Float
+  totalPrice    Float
+  
+  status        BookingItemStatus @default(PENDING)
+  notes         String?
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  @@map("booking_items")
+}
+
+enum BookingItemStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+// ============================================================================
+// REVIEWS & FAVORITES
+// ============================================================================
+
+model Review {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  vendorId      String
+  vendor        Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  
+  rating        Int           // 1-5
+  comment       String?
+  images        String[]
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  @@unique([userId, vendorId])
+  @@map("reviews")
+}
+
+model Favorite {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  vendorId      String
+  vendor        Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime      @default(now())
+  
+  @@unique([userId, vendorId])
+  @@map("favorites")
+}
